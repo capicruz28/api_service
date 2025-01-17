@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from app.routers import empleados
+from app.routers import usuarios
 
 app = FastAPI()
 
 # Registrar los routers
 app.include_router(empleados.router, prefix="/api/empleados", tags=["Empleados"])
+
+app.include_router(usuarios.router, prefix="/api/usuarios", tags=["Usuarios"])
 
 @app.get("/")
 async def root():
