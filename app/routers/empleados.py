@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.db.queries import execute_query, execute_procedure
+from app.db.queries import execute_query, execute_procedure_params
 
 router = APIRouter()
 
@@ -23,7 +23,7 @@ async def invocar_procedimiento(nordpr: str):
     params = {"wnordpr": nordpr}
 
     try:
-        resultado = execute_procedure(procedure_name, params)
+        resultado = execute_procedure_params(procedure_name, params)
         if not resultado:
             raise HTTPException(status_code=404, detail="No se encontraron resultados")
         return {"data": resultado}
