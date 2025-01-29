@@ -1,9 +1,14 @@
+# CLONACION EN NUEVO EQUIPO
+# Clona tu repositorio
+git clone https://github.com/tu-usuario/tu-repositorio.git
+# Abrir ruta del repositorio
+cd tu-repositorio
 # crear espacio virtual 
-python -m venv .venv     
-
+python -m venv venv     
 # acceder al espacio virtual 
 venv\Scripts\activate
-
+# Instala las dependencias
+pip install -r requirements.txt
 # ejecutar apis
 uvicorn app.main:app --reload
 
@@ -13,6 +18,25 @@ DB_USER=sa
 DB_PASSWORD=HebsMaq
 DB_DATABASE=bdtex
 DB_PORT=1433
+
+# DESPLIEGUE EN SERVIDOR
+# Instala Python
+Descarga Python desde: python.org. (Durante la instalación, selecciona "Add Python to PATH".)
+# Instala Git
+Instala Git si no lo tienes: Git for Windows.
+# Clona tu repositorio
+git clone https://github.com/tu-usuario/tu-repositorio.git
+# Abrir ruta del repositorio
+cd tu-repositorio
+# Crea un entorno virtual
+python -m venv venv
+# Activa el entorno virtual
+venv\Scripts\activate
+# Instala las dependencias
+pip install -r requirements.txt
+# Prueba que tu API funciona localmente
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
 
 # GITHUB
 # Comandos Básicos de Git
