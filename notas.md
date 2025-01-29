@@ -36,7 +36,23 @@ venv\Scripts\activate
 pip install -r requirements.txt
 # Prueba que tu API funciona localmente
 uvicorn app.main:app --host 0.0.0.0 --port 8000
-
+# Para ejecutar FastAPI en segundo plano como un servicio
+# Crea un archivo batch (start_api.bat) en la carpeta del proyecto
+start_api.bat creado en la aplicación
+# Descarga e instala NSSM
+descarga y dirigite a la carpeta para ejecutar comandos.
+# Creacion de un servicio
+./nssm.exe install FastAPI_Service
+# Direccionar al archivo .bat
+Path: Ruta del archivo start_api.bat.
+Startup Directory: Carpeta del proyecto.
+Guarda y cierra.
+# Iniciar el Servicio de FastAPI
+net start FastAPI_Service
+# Detener el Servicio de FastAPI
+net stop FastAPI_Service
+# Automatización con un Script si realizas actualizaciones frecuentes (Opcional)
+update_api.bat creado en la aplicación
 
 # GITHUB
 # Comandos Básicos de Git
