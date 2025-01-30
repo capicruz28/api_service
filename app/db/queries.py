@@ -1,5 +1,6 @@
 from app.db.connection import get_db_connection
 
+# METODOS PARA EJECUTAR CONSULTAS SQL
 def execute_query(query: str, params: tuple = ()):
     conn = get_db_connection()  # 1. Obtiene una conexión a la base de datos
     cursor = conn.cursor()  # 2. Crea un cursor para ejecutar la consulta
@@ -19,6 +20,7 @@ def execute_query(query: str, params: tuple = ()):
         cursor.close() # 8. Cierra el cursor
         conn.close() # 9. Cierra la conexión
 
+# METODOS PARA EJECUTAR PROCEDIMIENTOS ALMACENADOS
 def execute_procedure(procedure_name: str):
     conn = get_db_connection() # 1. Obtiene la conexión a la base de datos
     cursor = conn.cursor() # 2. Crea un cursor para ejecutar la consulta
@@ -56,6 +58,7 @@ def execute_procedure(procedure_name: str):
         cursor.close() # 14. Cierra el cursor
         conn.close() # 15. Cierra la conexión a la base de datos
 
+# METODOS PARA EJECUTAR PROCEDIMIENTOS ALMACENADOS CON PARÁMETROS
 def execute_procedure_params(procedure_name: str, params: dict):
     conn = get_db_connection() # 1. Obtiene la conexión a la base de datos
     cursor = conn.cursor() # 2. Crea un cursor para ejecutar la consulta
@@ -84,7 +87,7 @@ def execute_procedure_params(procedure_name: str, params: dict):
             print("Procedimiento ejecutado correctamente, sin resultados.")
             return {"message": "Procedimiento ejecutado correctamente, sin resultados"}
         
-        print(f"Resultados obtenidos: {results}") # 10. Muestra los resultados en consola
+        print(f"Resultados obtenidos: {results}")  # 10. Muestra los resultados en consola
         return results # 11. Retorna los datos en formato de lista de diccionarios
     
     except Exception as e:
