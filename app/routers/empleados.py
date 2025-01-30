@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.db.queries import execute_query, execute_procedure_params
 
-router = APIRouter()
+router = APIRouter() # 1. Crea un router de FastAPI
 
 @router.get("/")
 async def get_empleados():
