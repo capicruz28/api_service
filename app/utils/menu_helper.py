@@ -17,7 +17,7 @@ def build_menu_tree(menu_items: List[dict]) -> List[dict]:
         }
 
     # Luego, construir la estructura jerárquica
-    for item in menu_items:
+    for item in menu_items: 
         if item['ParentId'] is None:
             root_items.append(menu_dict[item['MenuId']])
         else:
