@@ -1,26 +1,110 @@
-from fastapi import FastAPI
-from app.routers import empleados
-from app.routers import usuarios
-from app.routers import menus
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from app.core.config import settings
+from app.core.exceptions import configure_exception_handlers
+from app.api.v1.api import api_router
+from app.db.connection import get_db_connection
+from app.core.logging_config import setup_logging
+import logging
+from typing import Any
 
-app = FastAPI()
+# Configurar logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
-# Registrar los routers
-app.include_router(empleados.router, prefix="/api/empleados", tags=["Empleados"])
+def create_application() -> FastAPI:
+    """
+    Crea y configura la aplicación FastAPI
+    """
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        version=settings.VERSION,
+        description=settings.DESCRIPTION,
+        docs_url="/docs",
+        redoc_url="/redoc"
+    )
 
-app.include_router(usuarios.router, prefix="/api/usuarios", tags=["Usuarios"])
+    # Configurar CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-app.include_router(menus.router, prefix="/api/menus", tags=["Menus"])
+    # Configurar manejadores de excepciones
+    configure_exception_handlers(app)
 
+    # Incluir las rutas de la API v1
+    app.include_router(api_router, prefix=settings.API_V1_STR)
+
+    # Middleware para logging de requests
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next: Any):
+        logger.info(f"Incoming request: {request.method} {request.url}")
+        response = await call_next(request)
+        return response
+
+    return app
+
+# Crear la instancia de la aplicación
+app = create_application()
+
+# Rutas base
 @app.get("/")
 async def root():
-    return {"message": "API FastAPI con SQL Server"}
+    """
+    Ruta raíz que muestra información básica de la API
+    """
+    return {
+        "message": "PeruFashions API",
+        "version": settings.VERSION,
+        "docs": "/docs"
+    }
 
+@app.get("/health")
+async def health_check():
+    """
+    Endpoint para verificar el estado de la aplicación y la conexión a la BD
+    """
+    try:
+        # Verificar conexión a la base de datos
+        with get_db_connection() as conn:
+            if conn:
+                db_status = "connected"
+            else:
+                db_status = "disconnected"
+    except Exception as e:
+        logger.error(f"Error en health check: {str(e)}")
+        db_status = "error"
+
+    return {
+        "status": "healthy",
+        "version": settings.VERSION,
+        "database": db_status
+    }
+
+# Para compatibilidad con el código existente
 @app.get("/api/test")
 async def test_db():
-    from app.db.connection import get_db_connection
+    """
+    Test de conexión a la base de datos
+    """
     try:
-        conn = get_db_connection()
-        return {"message": "Conexión exitosa"}
+        with get_db_connection() as conn:
+            return {"message": "Conexión exitosa"}
     except Exception as e:
+        logger.error(f"Error en test de conexión: {str(e)}")
         return {"error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level=settings.LOG_LEVEL.lower()
+    )
