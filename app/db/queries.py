@@ -18,6 +18,31 @@ def execute_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         finally:
             cursor.close()
 
+def execute_insert(query: str, params: tuple = ()) -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            
+            # Obtener el ID y datos del registro insertado
+            if cursor.description:
+                columns = [column[0] for column in cursor.description]
+                result = dict(zip(columns, cursor.fetchone()))
+            else:
+                result = {}
+            
+            conn.commit()
+            logger.info("Inserción exitosa")
+            return result
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error en execute_insert: {str(e)}")
+            raise DatabaseError(status_code=500, detail=f"Error en la inserción: {str(e)}")
+        finally:
+            cursor.close()
+
+            
+
 def execute_procedure(procedure_name: str) -> List[Dict[str, Any]]:
     with get_db_connection() as conn:
         try:
