@@ -20,3 +20,9 @@ class UsuarioResponse(BaseModel):
     es_activo: bool
     fecha_creacion: datetime
 
+class UsuarioUpdate(BaseModel):
+    nombre_usuario: Optional[str] = Field(None, min_length=3, max_length=50)
+    correo: Optional[EmailStr] = None
+    nombre: Optional[str] = Field(None, max_length=50)
+    apellido: Optional[str] = Field(None, max_length=50)
+    es_activo: Optional[bool] = None
