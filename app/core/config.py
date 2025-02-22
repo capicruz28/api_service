@@ -22,7 +22,8 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "default-secret-key")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")  # Agregamos el algoritmo para JWT
 
     # CORS - Lista predefinida de orígenes permitidos
     ALLOWED_ORIGINS: List[str] = [

@@ -18,6 +18,32 @@ def execute_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         finally:
             cursor.close()
 
+def execute_auth_query(query: str, params: tuple = ()) -> Dict[str, Any]:
+    """
+    Ejecuta una consulta específica para autenticación y retorna un único registro
+    """
+    with get_db_connection() as conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+
+            if cursor.description is None:
+                return None
+
+            columns = [column[0] for column in cursor.description]
+            row = cursor.fetchone()
+
+            if row:
+                return dict(zip(columns, row))
+            return None
+
+        except Exception as e:
+            logger.error(f"Error en execute_auth_query: {str(e)}")
+            raise DatabaseError(status_code=500, detail=f"Error en la autenticación: {str(e)}")
+        finally:
+            if cursor:
+                cursor.close()
+
 def execute_insert(query: str, params: tuple = ()) -> Dict[str, Any]:
     with get_db_connection() as conn:
         try:
