@@ -8,6 +8,9 @@ logger = get_logger(__name__)
 
 @router.get("/getmenu")
 async def get_menu():
+    """
+    Endpoint para construir Menus
+    """
     procedure_name = "sp_GetFullMenu"
 
     try:
