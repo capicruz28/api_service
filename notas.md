@@ -13,11 +13,20 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 
 # crear (.env) para conexion db
+# Database
 DB_SERVER=perufashions9
 DB_USER=sa
 DB_PASSWORD=HebsMaq
 DB_DATABASE=bdtex
 DB_PORT=1433
+
+# Security
+SECRET_KEY=8c8b3c6a0b178437c99799e426cd5f6ee992e496d8ca0e25444eb2a3914690c3
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+ALGORITHM=HS256
+
+# Logging
+LOG_LEVEL=INFO
 
 # DESPLIEGUE EN SERVIDOR
 # Instala Python

@@ -18,12 +18,12 @@ class Settings(BaseSettings):
     DB_USER: str = os.getenv("DB_USER", "")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     DB_DATABASE: str = os.getenv("DB_DATABASE", "")
-    DB_PORT: int = int(os.getenv("DB_PORT", "1433"))
+    DB_PORT: int = int(os.getenv("DB_PORT", ""))
 
     # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "default-secret-key")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")  # Agregamos el algoritmo para JWT
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", ""))
+    ALGORITHM: str = os.getenv("ALGORITHM", "")  # Agregamos el algoritmo para JWT
 
     # CORS - Lista predefinida de orígenes permitidos
     ALLOWED_ORIGINS: List[str] = [
