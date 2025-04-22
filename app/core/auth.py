@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 from app.core.security import verify_password
 from app.db.queries import execute_auth_query
-from app.schemas.auth import TokenData
+from app.schemas.auth import TokenPayload
 import logging
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenPayload(username=username)
     except JWTError:
         raise credentials_exception
 

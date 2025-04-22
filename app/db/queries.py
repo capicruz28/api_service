@@ -146,3 +146,51 @@ def execute_procedure_params(procedure_name: str, params: dict) -> List[Dict[str
             raise DatabaseError(status_code=500, detail=f"Error en el procedimiento: {str(e)}")
         finally:
             cursor.close()
+
+# Consulta para obtener usuarios paginados con sus roles, filtrando eliminados y buscando
+SELECT_USUARIOS_PAGINATED = """
+WITH UserRoles AS (
+    SELECT
+        u.usuario_id,
+        u.nombre_usuario,
+        u.correo,
+        u.nombre,
+        u.apellido,
+        u.es_activo,
+        u.correo_confirmado,
+        u.fecha_creacion,
+        u.fecha_ultimo_acceso,
+        u.fecha_actualizacion,
+        r.rol_id,
+        r.nombre AS nombre_rol
+        -- Añade aquí otros campos de 'usuario' o 'rol' que necesites
+    FROM usuario u
+    LEFT JOIN usuario_rol ur ON u.usuario_id = ur.usuario_id AND ur.es_activo = 1
+    LEFT JOIN rol r ON ur.rol_id = r.rol_id AND r.es_activo = 1
+    WHERE
+        u.es_eliminado = 0
+        AND (? IS NULL OR (
+            u.nombre_usuario LIKE ? OR
+            u.correo LIKE ? OR
+            u.nombre LIKE ? OR
+            u.apellido LIKE ?
+        ))
+)
+SELECT * FROM UserRoles
+ORDER BY usuario_id -- O el campo por el que prefieras ordenar por defecto
+OFFSET ? ROWS FETCH NEXT ? ROWS ONLY;
+"""
+
+# Consulta para contar el total de usuarios que coinciden con la búsqueda y no están eliminados
+COUNT_USUARIOS_PAGINATED = """
+SELECT COUNT(DISTINCT u.usuario_id)
+FROM usuario u
+WHERE
+    u.es_eliminado = 0
+    AND (? IS NULL OR (
+        u.nombre_usuario LIKE ? OR
+        u.correo LIKE ? OR
+        u.nombre LIKE ? OR
+        u.apellido LIKE ?
+    ));
+"""
