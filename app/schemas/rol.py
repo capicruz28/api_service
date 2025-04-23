@@ -1,6 +1,6 @@
 # app/schemas/rol.py
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List # <-- Añadir List
 from datetime import datetime
 
 class RolBase(BaseModel):
@@ -26,3 +26,11 @@ class RolRead(RolBase):
 
     class Config:
         from_attributes = True # Para compatibilidad si se usa con ORM o objetos similares
+
+# --- NUEVO: Schema para Respuesta Paginada ---
+class PaginatedRolResponse(BaseModel):
+    """Schema para la respuesta paginada de roles."""
+    roles: List[RolRead] = Field(..., description="Lista de roles para la página actual")
+    total_roles: int = Field(..., gt=-1, description="Número total de roles que coinciden con la búsqueda/filtros")
+    pagina_actual: int = Field(..., gt=0, description="Número de la página actual devuelta")
+    total_paginas: int = Field(..., gt=-1, description="Número total de páginas disponibles")

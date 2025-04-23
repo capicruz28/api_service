@@ -194,3 +194,59 @@ WHERE
         u.apellido LIKE ?
     ));
 """
+
+# --- Consultas de Roles (Existentes - SIN CAMBIOS) ---
+# (Asumiendo que tienes aquí tus queries SELECT_ROL_BY_ID, INSERT_ROL, etc.)
+# Si no las tienes, deberías añadirlas aquí. Por ejemplo:
+SELECT_ROL_BY_ID = "SELECT rol_id, nombre, descripcion, es_activo, fecha_creacion FROM dbo.rol WHERE rol_id = ? AND es_activo = 1"
+SELECT_ALL_ROLES = "SELECT rol_id, nombre, descripcion, es_activo, fecha_creacion FROM dbo.rol WHERE es_activo = 1 ORDER BY nombre"
+INSERT_ROL = "INSERT INTO dbo.rol (nombre, descripcion, es_activo) OUTPUT INSERTED.rol_id, INSERTED.nombre, INSERTED.descripcion, INSERTED.es_activo, INSERTED.fecha_creacion VALUES (?, ?, ?)"
+UPDATE_ROL = "UPDATE dbo.rol SET nombre = ?, descripcion = ?, es_activo = ? OUTPUT INSERTED.rol_id, INSERTED.nombre, INSERTED.descripcion, INSERTED.es_activo, INSERTED.fecha_creacion WHERE rol_id = ?"
+# Nota: DEACTIVATE_ROL podría ser un caso especial de UPDATE_ROL o una query separada
+DEACTIVATE_ROL = "UPDATE dbo.rol SET es_activo = 0 OUTPUT INSERTED.rol_id, INSERTED.nombre, INSERTED.es_activo WHERE rol_id = ? AND es_activo = 1"
+REACTIVATE_ROL = """
+    UPDATE dbo.rol
+    SET
+        es_activo = 1
+    OUTPUT
+        INSERTED.rol_id,
+        INSERTED.nombre,
+        INSERTED.descripcion,
+        INSERTED.es_activo,
+        INSERTED.fecha_creacion
+    WHERE
+        rol_id = ?
+        AND es_activo = 0;  -- Solo reactivar si está inactivo
+"""
+CHECK_ROL_NAME_EXISTS = "SELECT rol_id FROM dbo.rol WHERE LOWER(nombre) = LOWER(?) AND rol_id != ?"
+
+
+# --- NUEVAS QUERIES PARA PAGINACIÓN DE ROLES ---
+COUNT_ROLES_PAGINATED = """
+    SELECT COUNT(rol_id) as total -- Añadir alias 'total' para consistencia
+    FROM dbo.rol
+    WHERE (? IS NULL OR (
+        LOWER(nombre) LIKE LOWER(?) OR
+        LOWER(descripcion) LIKE LOWER(?)
+    ));
+    -- Nota: No filtra por es_activo aquí para mostrar todos en mantenimiento
+    -- Usamos LOWER() para búsqueda insensible a mayúsculas/minúsculas
+"""
+
+SELECT_ROLES_PAGINATED = """
+    SELECT
+        rol_id, nombre, descripcion, es_activo, fecha_creacion
+        -- , fecha_actualizacion -- Descomentar si existe y la quieres mostrar
+    FROM
+        dbo.rol
+    WHERE (? IS NULL OR (
+        LOWER(nombre) LIKE LOWER(?) OR
+        LOWER(descripcion) LIKE LOWER(?)
+    ))
+    ORDER BY
+        rol_id -- O el campo que prefieras (ej. rol_id)
+    OFFSET ? ROWS FETCH NEXT ? ROWS ONLY;
+    -- Nota: No filtra por es_activo aquí
+    -- Usamos LOWER() para búsqueda insensible a mayúsculas/minúsculas
+"""
+# --- FIN NUEVAS QUERIES ---
