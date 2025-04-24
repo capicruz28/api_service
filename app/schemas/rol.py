@@ -1,5 +1,5 @@
 # app/schemas/rol.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List # <-- Añadir List
 from datetime import datetime
 
@@ -34,3 +34,22 @@ class PaginatedRolResponse(BaseModel):
     total_roles: int = Field(..., gt=-1, description="Número total de roles que coinciden con la búsqueda/filtros")
     pagina_actual: int = Field(..., gt=0, description="Número de la página actual devuelta")
     total_paginas: int = Field(..., gt=-1, description="Número total de páginas disponibles")
+
+class PermisoBase(BaseModel):
+    """Schema base para la información de permiso sobre un menú."""
+    menu_id: int = Field(..., description="ID del menú al que aplica el permiso")
+    puede_ver: bool = Field(default=True, description="Permiso para ver el menú")
+    puede_editar: bool = Field(default=False, description="Permiso para editar contenido asociado al menú (si aplica)")
+    puede_eliminar: bool = Field(default=False, description="Permiso para eliminar contenido asociado al menú (si aplica)")
+
+    model_config = ConfigDict(from_attributes=True) # Permite mapear desde objetos ORM/DB si fuera necesario
+
+class PermisoRead(PermisoBase):
+    """Schema para leer un permiso existente, incluyendo IDs."""
+    rol_menu_id: int = Field(..., description="ID único del registro de permiso")
+    rol_id: int = Field(..., description="ID del rol al que pertenece el permiso")
+    # Hereda menu_id, puede_ver, puede_editar, puede_eliminar de PermisoBase
+
+class PermisoUpdatePayload(BaseModel):
+    """Schema para recibir la lista completa de permisos a actualizar para un rol."""
+    permisos: List[PermisoBase] = Field(..., description="Lista completa de permisos para asignar al rol")

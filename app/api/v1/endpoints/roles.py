@@ -1,10 +1,10 @@
 # app/api/v1/endpoints/roles.py
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, Path
 from typing import List, Optional, Dict, Any
 
 # Importar Schemas (Añadir PaginatedRolResponse)
-from app.schemas.rol import RolCreate, RolUpdate, RolRead, PaginatedRolResponse # <-- Añadir PaginatedRolResponse
+from app.schemas.rol import RolCreate, RolUpdate, RolRead, PaginatedRolResponse, PermisoRead, PermisoUpdatePayload
 
 # Importar Servicio
 from app.services.rol_service import RolService
@@ -247,5 +247,68 @@ async def reactivate_rol(
     except Exception as e:
         logger.exception(f"Error inesperado en endpoint reactivate_rol (ID: {rol_id}): {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor al reactivar el rol.")
+
+@router.get(
+    "/{rol_id}/permisos",
+    response_model=List[PermisoRead],
+    summary="Obtener Permisos de un Rol",
+    description="Obtiene la lista de permisos de menú asignados a un rol específico. Requiere rol 'admin'.",
+    dependencies=[Depends(RoleChecker(["Administrador"]))]
+)
+async def get_permisos_por_rol(
+    rol_id: int = Path(..., title="ID del Rol", description="El ID del rol para consultar sus permisos")
+):
+    logger.info(f"Solicitud recibida en GET /roles/{rol_id}/permisos")
+    try:
+        # Llamada estática al servicio
+        permisos = await RolService.obtener_permisos_por_rol(rol_id=rol_id)
+        return permisos
+    # --- CAPTURAR ServiceError ---
+    except ServiceError as se:
+        logger.error(f"Error de servicio en endpoint get_permisos_por_rol (ID: {rol_id}): {se.detail}")
+        # Convertir ServiceError a HTTPException
+        raise HTTPException(status_code=se.status_code, detail=se.detail)
+    # --- QUITAR except NotFoundError ---
+    # except NotFoundError as e:
+    #      logger.warning(f"Rol no encontrado al obtener permisos: {e}")
+    #      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error inesperado al obtener permisos para rol {rol_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al obtener los permisos del rol."
+        )
+
+@router.put(
+    "/{rol_id}/permisos",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Actualizar Permisos de un Rol",
+    description="Sobrescribe TODOS los permisos de menú para un rol específico. Requiere rol 'admin'.",
+    dependencies=[Depends(RoleChecker(["Administrador"]))]
+)
+async def update_permisos_rol(
+    rol_id: int = Path(..., title="ID del Rol", description="El ID del rol cuyos permisos se actualizarán"),
+    payload: PermisoUpdatePayload = Body(..., description="Objeto que contiene la lista completa de los nuevos permisos para el rol")
+):
+    logger.info(f"Solicitud recibida en PUT /roles/{rol_id}/permisos")
+    try:
+        # Llamada estática al servicio
+        await RolService.actualizar_permisos_rol(rol_id=rol_id, permisos_payload=payload)
+        return None
+    # --- CAPTURAR ServiceError ---
+    except ServiceError as se:
+        logger.error(f"Error de servicio en endpoint update_permisos_rol (ID: {rol_id}): {se.detail}")
+        # Convertir ServiceError a HTTPException
+        raise HTTPException(status_code=se.status_code, detail=se.detail)
+    # --- QUITAR except NotFoundError ---
+    # except NotFoundError as e:
+    #     logger.warning(f"Rol no encontrado al intentar actualizar permisos: {e}")
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error inesperado al actualizar permisos para rol {rol_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al actualizar los permisos del rol."
+        )
 
 # --- FIN DE LOS ENDPOINTS DE ROLES ---

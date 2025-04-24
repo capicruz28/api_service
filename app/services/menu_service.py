@@ -2,9 +2,10 @@
 
 from typing import List, Dict, Optional # Añadir Optional
 # Añadir execute_query
-from app.db.queries import execute_procedure, execute_query
+from app.db.queries import execute_procedure, execute_query, GET_ALL_MENUS_ADMIN
 from app.core.exceptions import ServiceError
 from app.utils.menu_helper import build_menu_tree # Asumiendo que existe este helper
+from app.schemas.menu import MenuResponse, MenuItem # Importar schemas necesarios
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,3 +62,47 @@ class MenuService:
         except Exception as e:
             logger.error(f"Error obteniendo menú por ID {menu_id}: {str(e)}", exc_info=True)
             return None # Devolver None en caso de error
+
+    @staticmethod
+    async def obtener_todos_menus_estructurados_admin() -> MenuResponse:
+        """
+        Obtiene TODOS los elementos del menú (activos e inactivos) de forma asíncrona
+        y los devuelve en una estructura de árbol jerárquica.
+        Utiliza la stored procedure sp_GetAllMenuItemsAdmin.
+
+        Returns:
+            MenuResponse: Objeto que contiene la lista jerárquica de menús.
+
+        Raises:
+            ServiceError: Si ocurre un error durante la consulta o el procesamiento.
+        """
+        logger.info("Obteniendo estructura completa de menús para admin.")
+        try:
+            # Llamada directa a la función de queries
+            # Asumiendo que execute_procedure devuelve lista de pyodbc.Row o similar
+            resultado_sp = execute_procedure(GET_ALL_MENUS_ADMIN) # GET_ALL_MENUS_ADMIN es solo el nombre
+
+            if not resultado_sp:
+                logger.warning("sp_GetAllMenuItemsAdmin no devolvió resultados.")
+                return MenuResponse(menu=[])
+
+            # Convertir a lista de diccionarios para build_menu_tree
+            menu_items_raw = [dict(row) for row in resultado_sp]
+            menu_tree: List[MenuItem] = build_menu_tree(menu_items_raw)
+
+            logger.info(f"Estructura de menú admin construida con {len(menu_tree)} items raíz.")
+            return MenuResponse(menu=menu_tree)
+
+        # --- CAPTURAR DatabaseError PRIMERO (SI APLICA) ---
+        except DatabaseError as db_error:
+             logger.error(f"Error de base de datos al obtener estructura admin: {db_error}", exc_info=True)
+             # Lanzar ServiceError consistente
+             raise ServiceError(status_code=500, detail=f"Error de base de datos al obtener estructura admin: {db_error.detail}")
+        # --- CAPTURAR Exception GENERAL DESPUÉS ---
+        except Exception as e:
+            logger.exception(f"Error inesperado al obtener/construir el árbol de menús admin: {e}")
+            # Lanzar ServiceError consistente
+            raise ServiceError(
+                status_code=500, # O un código más específico si lo deseas
+                detail="Error interno al procesar la estructura completa del menú."
+            )

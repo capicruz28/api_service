@@ -1,12 +1,14 @@
 # app/api/v1/endpoints/menus.py (CORREGIDO OTRA VEZ)
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from app.db.queries import execute_procedure
 # 1. Importa build_menu_tree (y create_menu_response si la usas)
 from app.utils.menu_helper import build_menu_tree #, create_menu_response
 from app.core.logging_config import get_logger
+from app.api.deps import get_current_active_user, RoleChecker
 # 2. Importa SOLO MenuResponse (MenuItem se usa dentro del helper)
 from app.schemas.menu import MenuResponse #, MenuItem
+from app.services.menu_service import MenuService
 
 # (Opcional) Importa dependencias de autenticación si es necesario
 # from app.api.deps import get_current_active_user
@@ -62,4 +64,33 @@ async def get_menu(
         raise HTTPException(
             status_code=500,
             detail="Error interno del servidor al procesar el menú."
+        )
+
+@router.get(
+    "/all-structured",
+    response_model=MenuResponse,
+    summary="Obtener Árbol Completo de Menús (Admin)",
+    description="Obtiene todos los elementos del menú (activos e inactivos) estructurados jerárquicamente. Requiere rol 'admin'.",
+    dependencies=[Depends(RoleChecker(["Administrador"]))] # Mantenemos la protección de rol
+)
+async def get_all_menus_admin(
+    # --- ELIMINAR INYECCIÓN DE DEPENDENCIA MenuService ---
+    # menu_service_instance: MenuService = Depends(MenuService) # <- Eliminar esta línea
+):
+    """
+    Endpoint protegido para administradores que devuelve la estructura completa del menú.
+    """
+    logger.info("Solicitud recibida en GET /menus/all-structured")
+    try:
+        # --- LLAMAR AL MÉTODO ESTÁTICAMENTE ---
+        response = await MenuService.obtener_todos_menus_estructurados_admin()
+        # --- FIN LLAMADA ESTÁTICA ---
+        return response
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.exception("Error inesperado en el endpoint /menus/all-structured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al obtener la estructura completa del menú."
         )

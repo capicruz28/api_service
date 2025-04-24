@@ -1,15 +1,23 @@
 # app/services/rol_service.py
-
+from fastapi import status
 import math
 from typing import Dict, List, Optional
 # Importar las queries necesarias, incluyendo REACTIVATE_ROL
 from app.db.queries import (
-    execute_query, execute_insert, execute_update,
+    execute_query, execute_insert, execute_update, execute_transaction,
     COUNT_ROLES_PAGINATED, SELECT_ROLES_PAGINATED,
-    DEACTIVATE_ROL, REACTIVATE_ROL # <-- Añadir DEACTIVATE_ROL y REACTIVATE_ROL
+    DEACTIVATE_ROL, REACTIVATE_ROL, # <-- Añadir DEACTIVATE_ROL y REACTIVATE_ROL
+    SELECT_PERMISOS_POR_ROL,
+    DELETE_PERMISOS_POR_ROL,
+    INSERT_PERMISO_ROL
 )
-from app.core.exceptions import ServiceError, ValidationError
+from app.schemas.rol import (    
+    # --- AÑADIR IMPORTACIONES DE SCHEMAS DE PERMISOS ---
+    PermisoRead, PermisoUpdatePayload, PermisoBase
+)
+from app.core.exceptions import ServiceError, ValidationError, DatabaseError
 import logging
+import pyodbc
 
 logger = logging.getLogger(__name__)
 
@@ -485,5 +493,96 @@ class RolService:
             logger.exception(f"Error inesperado obteniendo todos los roles activos: {str(e)}")
             # Lanzar ServiceError para ser manejado en el endpoint
             raise ServiceError(status_code=500, detail=f"Error obteniendo la lista de roles activos: {str(e)}")
+
+    @staticmethod
+    async def obtener_permisos_por_rol(rol_id: int) -> List[PermisoRead]:
+        """
+        Obtiene la lista de permisos asignados a un rol específico.
+
+        Args:
+            rol_id: El ID del rol cuyos permisos se quieren obtener.
+
+        Returns:
+            Lista de objetos PermisoRead representando los permisos asignados.
+
+        Raises:
+            ServiceError: Si el rol no existe (404) o si ocurre un error de BD (500).
+        """
+        logger.info(f"Obteniendo permisos para el rol ID: {rol_id}")
+
+        # Verificar si el rol existe usando el método estático
+        rol_existente = await RolService.obtener_rol_por_id(rol_id)
+        if not rol_existente:
+             logger.warning(f"Intento de obtener permisos para rol inexistente ID: {rol_id}")
+             # --- LANZAR ServiceError EN LUGAR DE DEVOLVER [] O NotFoundError ---
+             raise ServiceError(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rol con ID {rol_id} no encontrado.")
+
+        try:
+            resultados = execute_query(SELECT_PERMISOS_POR_ROL, (rol_id,))
+            if not resultados:
+                logger.info(f"El rol ID {rol_id} no tiene permisos asignados.")
+                return [] # Devolver lista vacía si no hay permisos es correcto
+
+            permisos = [PermisoRead(**dict(row)) for row in resultados]
+            logger.info(f"Se encontraron {len(permisos)} permisos para el rol ID: {rol_id}")
+            return permisos
+
+        except DatabaseError as db_error:
+             logger.error(f"Error de base de datos al obtener permisos para rol {rol_id}: {db_error}", exc_info=True)
+             # Lanzar ServiceError consistente
+             raise ServiceError(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error de base de datos al obtener permisos: {db_error.detail}")
+        except Exception as e:
+            logger.exception(f"Error inesperado al obtener permisos para rol {rol_id}: {e}")
+            # Lanzar ServiceError consistente
+            raise ServiceError(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno al obtener permisos.")
+    
+    # --- NUEVO MÉTODO: ACTUALIZAR PERMISOS DE ROL ---
+    @staticmethod
+    async def actualizar_permisos_rol(rol_id: int, permisos_payload: PermisoUpdatePayload) -> None:
+        logger.info(f"Iniciando actualización de permisos para el rol ID: {rol_id}")
+
+        # 1. Verificar si el rol existe (fuera de la transacción)
+        rol_existente = await RolService.obtener_rol_por_id(rol_id)
+        if not rol_existente:
+            raise ServiceError(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rol con ID {rol_id} no encontrado para actualizar permisos.")
+
+        nuevos_permisos: List[PermisoBase] = permisos_payload.permisos
+        logger.debug(f"Se actualizarán {len(nuevos_permisos)} permisos para el rol {rol_id}.")
+
+        # 2. Definir la función que contiene las operaciones de la transacción
+        def _operaciones_permisos(cursor: pyodbc.Cursor): # La función recibe el cursor
+            # Borrar permisos existentes
+            logger.debug(f"Borrando permisos existentes para rol {rol_id} en transacción.")
+            cursor.execute(DELETE_PERMISOS_POR_ROL, (rol_id,))
+            logger.debug(f"Permisos existentes borrados para rol {rol_id}.")
+
+            # Insertar nuevos permisos
+            if nuevos_permisos:
+                logger.debug(f"Insertando {len(nuevos_permisos)} nuevos permisos para rol {rol_id}.")
+                insert_count = 0
+                for permiso in nuevos_permisos:
+                    # --- VALIDACIÓN DE DATOS (IMPORTANTE) ---
+                    # Aquí es donde ocurre el IntegrityError si menu_id es inválido.
+                    # El error de BD es correcto, pero el problema son los datos de entrada.
+                    params = (rol_id, permiso.menu_id, permiso.puede_ver, permiso.puede_editar, permiso.puede_eliminar)
+                    cursor.execute(INSERT_PERMISO_ROL, params)
+                    insert_count += 1
+                logger.debug(f"Insertados {insert_count} permisos para rol {rol_id}.")
+            else:
+                 logger.debug(f"No hay nuevos permisos para insertar para rol {rol_id}.")
+            # --- NO HACER COMMIT NI ROLLBACK AQUÍ ---
+
+        try:
+            # 3. Llamar a execute_transaction pasando la función de operaciones
+            execute_transaction(_operaciones_permisos)
+            logger.info(f"Permisos actualizados exitosamente para el rol ID: {rol_id}")
+
+        except DatabaseError as db_error: # Capturar DatabaseError de execute_transaction
+            logger.error(f"Error de base de datos durante la transacción de permisos para rol {rol_id}: {db_error}", exc_info=True)
+            # Relanzar como ServiceError
+            raise ServiceError(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error de base de datos al actualizar permisos: {db_error.detail}")
+        except Exception as e: # Capturar cualquier otro error inesperado
+            logger.exception(f"Error inesperado durante la actualización de permisos para rol {rol_id}: {e}")
+            raise ServiceError(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno al actualizar permisos.")
 
 # --- FIN DE LA CLASE RolService ---

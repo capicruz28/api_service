@@ -1,6 +1,7 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from app.db.connection import get_db_connection
 from app.core.exceptions import DatabaseError
+import pyodbc
 import logging
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,34 @@ def execute_procedure_params(procedure_name: str, params: dict) -> List[Dict[str
         finally:
             cursor.close()
 
+def execute_transaction(operations_func: Callable[[pyodbc.Cursor], None]) -> None:
+    """
+    Ejecuta operaciones de BD en una transacción.
+    Maneja errores de conexión y operación de pyodbc.
+    """
+    conn = None # Para referencia en logging si es necesario
+    cursor = None # Para referencia en logging si es necesario
+    try:
+        # 'get_db_connection' puede lanzar pyodbc.Error si falla la conexión
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # 'operations_func' puede lanzar pyodbc.Error (ej. IntegrityError)
+            operations_func(cursor)
+            # Si todo va bien, commit
+            conn.commit()
+            logger.debug("Transacción completada exitosamente.")
+
+    except pyodbc.Error as db_err: # Captura CUALQUIER error de pyodbc
+        # El rollback es implícito porque no se hizo commit y la conexión se cerrará.
+        logger.error(f"Error de base de datos (pyodbc) en transacción: {db_err}", exc_info=True)
+        # Relanzar como DatabaseError genérico para el servicio/endpoint
+        raise DatabaseError(status_code=500, detail=f"Error DB en transacción: {str(db_err)}")
+
+    except Exception as e:
+        # Captura cualquier otro error inesperado en operations_func
+        logger.error(f"Error inesperado (no pyodbc) en transacción: {e}", exc_info=True)
+        raise DatabaseError(status_code=500, detail=f"Error inesperado en transacción: {str(e)}")
+
 # Consulta para obtener usuarios paginados con sus roles, filtrando eliminados y buscando
 SELECT_USUARIOS_PAGINATED = """
 WITH UserRoles AS (
@@ -250,3 +279,33 @@ SELECT_ROLES_PAGINATED = """
     -- Usamos LOWER() para búsqueda insensible a mayúsculas/minúsculas
 """
 # --- FIN NUEVAS QUERIES ---
+
+# --- NUEVA CONSULTA PARA MENUS (ADMIN) ---
+# Llama a la nueva Stored Procedure que obtiene TODOS los menús
+GET_ALL_MENUS_ADMIN = "sp_GetAllMenuItemsAdmin;"
+
+
+# --- NUEVAS CONSULTAS PARA PERMISOS (RolMenuPermiso) ---
+
+# Selecciona todos los permisos asignados a un rol específico
+SELECT_PERMISOS_POR_ROL = """
+    SELECT rol_menu_id, rol_id, menu_id, puede_ver, puede_editar, puede_eliminar
+    FROM rol_menu_permiso
+    WHERE rol_id = ?;
+"""
+
+# Elimina TODOS los permisos asociados a un rol específico.
+# Se usa antes de insertar los nuevos permisos actualizados.
+DELETE_PERMISOS_POR_ROL = """
+    DELETE FROM rol_menu_permiso
+    WHERE rol_id = ?;
+"""
+
+# Inserta un nuevo registro de permiso para un rol y un menú.
+# Los parámetros serán (rol_id, menu_id, puede_ver, puede_editar, puede_eliminar)
+INSERT_PERMISO_ROL = """
+    INSERT INTO rol_menu_permiso (rol_id, menu_id, puede_ver, puede_editar, puede_eliminar)
+    VALUES (?, ?, ?, ?, ?);
+"""
+
+# --- FIN DE NUEVAS CONSULTAS ---
