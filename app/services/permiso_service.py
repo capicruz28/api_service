@@ -144,7 +144,7 @@ class PermisoService:
             SELECT
                 p.rol_menu_id, p.rol_id, p.menu_id,
                 p.puede_ver, p.puede_editar, p.puede_eliminar,
-                m.nombre AS menu_nombre, m.url AS menu_url, m.icono AS menu_icono -- Añadir campos del menú
+                m.nombre AS menu_nombre, m.ruta AS menu_url, m.icono AS menu_icono -- Añadir campos del menú
             FROM rol_menu_permiso p
             INNER JOIN menu m ON p.menu_id = m.menu_id -- Unir con tabla menu
             WHERE p.rol_id = ?
