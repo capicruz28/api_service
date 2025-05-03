@@ -6,7 +6,7 @@ from app.db.queries import (
     execute_procedure, execute_query, execute_insert, execute_update,
     GET_ALL_MENUS_ADMIN, INSERT_MENU, SELECT_MENU_BY_ID, UPDATE_MENU_TEMPLATE,
     DEACTIVATE_MENU, REACTIVATE_MENU, CHECK_MENU_EXISTS, CHECK_AREA_EXISTS,
-    GET_MENUS_BY_AREA_FOR_TREE_QUERY
+    GET_MENUS_BY_AREA_FOR_TREE_QUERY,GET_MAX_ORDEN_FOR_SIBLINGS, GET_MAX_ORDEN_FOR_ROOT
 )
 # --- SOLO IMPORTAMOS ServiceError (y DatabaseError si existe y se usa) ---
 from app.core.exceptions import ServiceError #, DatabaseError # Descomenta DatabaseError si existe y la usas
@@ -98,45 +98,71 @@ class MenuService:
     async def crear_menu(menu_data: MenuCreate) -> MenuReadSingle:
         logger.info(f"Intentando crear menú: {menu_data.nombre}")
         try:
-            # Validación simple (podrías añadir más lógica si quieres)
+            # --- Validaciones Previas ---
             if menu_data.padre_menu_id:
                 padre_exists = execute_query(CHECK_MENU_EXISTS, (menu_data.padre_menu_id,))
                 if not padre_exists:
-                    # Levanta ServiceError en lugar de BadRequestError
                     raise ServiceError(status_code=400, detail=f"El menú padre con ID {menu_data.padre_menu_id} no existe.")
-            if menu_data.area_id:
+            if not menu_data.area_id: # Asumimos que area_id es obligatorio
+                 raise ServiceError(status_code=400, detail="El ID del área es obligatorio para crear un menú.")
+            else:
                 area_exists = execute_query(CHECK_AREA_EXISTS, (menu_data.area_id,))
                 if not area_exists:
-                     # Levanta ServiceError en lugar de BadRequestError
                      raise ServiceError(status_code=400, detail=f"El área con ID {menu_data.area_id} no existe.")
 
+            # --- Calcular el siguiente 'orden' ---
+            max_orden_result = None
+            if menu_data.padre_menu_id:
+                # Buscar max orden entre hermanos
+                max_orden_result = execute_query(GET_MAX_ORDEN_FOR_SIBLINGS, (menu_data.area_id, menu_data.padre_menu_id))
+            else:
+                # Buscar max orden entre raíces del área
+                max_orden_result = execute_query(GET_MAX_ORDEN_FOR_ROOT, (menu_data.area_id,))
+
+            max_orden = 0 # Valor por defecto si no hay hermanos/raíces
+            if max_orden_result and max_orden_result[0]['max_orden'] is not None:
+                max_orden = max_orden_result[0]['max_orden']
+
+            next_orden = max_orden + 1
+            logger.debug(f"Calculado next_orden: {next_orden} para padre {menu_data.padre_menu_id} en area {menu_data.area_id}")
+
+            # --- Preparar parámetros para INSERT ---
+            # Usamos el 'next_orden' calculado, ignoramos menu_data.orden
             params = (
-                menu_data.nombre, menu_data.icono, menu_data.ruta,
-                menu_data.padre_menu_id, menu_data.orden, menu_data.area_id,
+                menu_data.nombre,
+                menu_data.icono,
+                menu_data.ruta,
+                menu_data.padre_menu_id,
+                next_orden, # <<< Usar el orden calculado
+                menu_data.area_id,
                 menu_data.es_activo
             )
-            resultado = execute_insert(INSERT_MENU, params)
-            if not resultado:
-                 raise ServiceError(status_code=500, detail="La inserción no devolvió el registro creado.")
 
+            # --- Ejecutar Inserción ---
+            resultado = execute_insert(INSERT_MENU, params)
+            if not resultado or 'menu_id' not in resultado: # Verificar que se devolvió el ID
+                 raise ServiceError(status_code=500, detail="La inserción no devolvió el registro creado correctamente.")
+
+            # --- Obtener nombre del área (opcional, para la respuesta) ---
             area_nombre = None
             if resultado.get('area_id'):
                  area_info = execute_query("SELECT nombre FROM area_menu WHERE area_id = ?", (resultado['area_id'],))
                  if area_info: area_nombre = area_info[0]['nombre']
 
+            # --- Crear y devolver respuesta ---
+            # Asegurarse que el 'orden' en la respuesta es el insertado
             created_menu = MenuReadSingle(**resultado, area_nombre=area_nombre)
-            logger.info(f"Menú '{created_menu.nombre}' creado con ID: {created_menu.menu_id}")
+            logger.info(f"Menú '{created_menu.nombre}' creado con ID: {created_menu.menu_id} y orden: {created_menu.orden}")
             return created_menu
 
-        except DatabaseError as db_err: # Mantenemos captura específica si existe
+        except DatabaseError as db_err:
             logger.error(f"Error de DB al crear menú: {db_err}", exc_info=True)
             raise ServiceError(status_code=500, detail=f"Error DB al crear menú: {getattr(db_err, 'detail', str(db_err))}")
-        except ServiceError as se: # Captura los ServiceError de validación
-             logger.warning(f"Error de servicio (posible validación) al crear menú: {se.detail}")
-             raise se # Relanzar el ServiceError (que ya tiene status_code 400)
+        except ServiceError as se:
+             logger.warning(f"Error de servicio (validación) al crear menú: {se.detail}")
+             raise se
         except Exception as e:
             logger.exception(f"Error inesperado al crear menú: {e}")
-            # Levanta ServiceError genérico
             raise ServiceError(status_code=500, detail=f"Error interno al crear menú: {str(e)}")
 
     # --- NUEVO: Actualizar Menú (Manejo de errores simplificado) ---

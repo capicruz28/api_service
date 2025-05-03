@@ -53,7 +53,6 @@ class MenuItem(BaseModel):
     nombre: str
     icono: Optional[str] = None
     ruta: Optional[str] = None
-    padre_menu_id: Optional[int] = None # Necesario para build_menu_tree
     orden: Optional[int] = None
     es_activo: bool
     area_id: Optional[int] = None # Añadir area_id

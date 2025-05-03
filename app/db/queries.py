@@ -449,7 +449,8 @@ LEFT JOIN
 WHERE
     m.area_id = ? -- Parámetro para el ID del área
 ORDER BY
-    m.orden ASC, m.nombre ASC; -- Un orden consistente ayuda a build_menu_tree
+    m.padre_menu_id ASC, -- Agrupa hijos bajo sus padres
+    m.orden ASC; -- Ordena los hermanos entre sí
 """
 
 # --- Queries originales que podrían quedar obsoletas ---
@@ -461,3 +462,16 @@ ORDER BY
 # UPDATE_AREA_TEMPLATE = "..." # Reemplazada por UPDATE_AREA_BASE_QUERY_TEMPLATE
 # DEACTIVATE_AREA = "..." # Reemplazada por TOGGLE_AREA_STATUS_QUERY
 # REACTIVATE_AREA = "..." # Reemplazada por TOGGLE_AREA_STATUS_QUERY
+
+GET_MAX_ORDEN_FOR_SIBLINGS = """
+    SELECT MAX(orden) as max_orden
+    FROM menu
+    WHERE area_id = ? AND padre_menu_id = ?;
+"""
+
+# NUEVA QUERY: Obtiene el máximo valor de 'orden' para los elementos raíz de un área
+GET_MAX_ORDEN_FOR_ROOT = """
+    SELECT MAX(orden) as max_orden
+    FROM menu
+    WHERE area_id = ? AND padre_menu_id IS NULL;
+"""
