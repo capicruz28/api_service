@@ -6,34 +6,34 @@ from jose import JWTError, jwt
 from typing import List, Dict, Any
 
 from app.core.config import settings
-from app.core.auth import oauth2_scheme # Reutilizamos el scheme definido
-from app.db.queries import execute_auth_query, execute_query # Necesitamos acceso a queries
+from app.core.auth import oauth2_scheme
+from app.db.queries import execute_auth_query, execute_query
+# --- Importar los schemas necesarios ---
 from app.schemas.auth import TokenPayload
-from app.services.usuario_service import UsuarioService # Para obtener roles
+from app.schemas.usuario import UsuarioReadWithRoles # <<< Importar schema de usuario
+from app.schemas.rol import RolRead # <<< Importar schema de rol
+# --- Fin importación schemas ---
+from app.services.usuario_service import UsuarioService
 
 import logging
 logger = logging.getLogger(__name__)
 
-# Excepción estándar para credenciales inválidas
+# Excepciones (sin cambios)
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="No se pudieron validar las credenciales",
     headers={"WWW-Authenticate": "Bearer"},
 )
-
-# Excepción para usuario inactivo
 inactive_user_exception = HTTPException(
-    status_code=status.HTTP_403_FORBIDDEN, # 403 Forbidden es más apropiado que 401
+    status_code=status.HTTP_403_FORBIDDEN,
     detail="Usuario inactivo",
 )
-
-# Excepción para permisos insuficientes
 forbidden_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Permisos insuficientes",
 )
 
-
+# get_current_user_data (sin cambios)
 async def get_current_user_data(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
     Decodifica el token, obtiene el nombre de usuario y lo devuelve.
@@ -50,68 +50,95 @@ async def get_current_user_data(token: str = Depends(oauth2_scheme)) -> Dict[str
         if username is None:
             logger.warning("Token JWT inválido: falta 'sub'.")
             raise credentials_exception
-        # Podríamos añadir más validaciones del payload aquí si fuera necesario
-        # Por ejemplo, verificar un 'token_type' si lo incluimos en el payload.
-
-        # Devolvemos el payload decodificado o solo el username/token_data
-        # Devolver el payload puede ser útil si añadimos más datos al token en el futuro
-        return payload # Contiene 'sub' y 'exp'
-
+        return payload
     except JWTError as e:
         logger.warning(f"Error de validación JWT: {e}")
         raise credentials_exception
 
-
+# --- get_current_active_user CORREGIDO ---
 async def get_current_active_user(
     payload: Dict[str, Any] = Depends(get_current_user_data)
-) -> Dict[str, Any]:
+) -> UsuarioReadWithRoles: # <<< Tipo de retorno es UsuarioReadWithRoles
     """
     Dependencia principal: Obtiene los datos completos del usuario activo desde la BD
-    basado en el nombre de usuario del token y añade sus roles.
+    basado en el nombre de usuario del token, añade sus roles (como objetos RolRead)
+    y devuelve una instancia del schema UsuarioReadWithRoles.
     """
     username = payload.get("sub")
-    # No necesitamos verificar username is None aquí, get_current_user_data ya lo hizo
 
     try:
-        # Obtener datos básicos del usuario
+        # Obtener datos básicos del usuario como diccionario
         user_query = """
-        SELECT usuario_id, nombre_usuario, correo, nombre, apellido, es_activo
+        SELECT usuario_id, nombre_usuario, correo, nombre, apellido, es_activo,
+               fecha_creacion, fecha_ultimo_acceso, correo_confirmado
         FROM usuario
         WHERE nombre_usuario = ? AND es_eliminado = 0
         """
-        user = execute_auth_query(user_query, (username,))
+        user_dict = execute_auth_query(user_query, (username,)) # Asume que devuelve dict o None
 
-        if not user:
+        if not user_dict:
             logger.warning(f"Usuario '{username}' del token válido no encontrado en BD (o eliminado).")
-            raise credentials_exception # El usuario ya no existe
+            raise credentials_exception
 
-        # ¡Verificar si el usuario está activo!
-        if not user.get('es_activo'):
+        if not user_dict.get('es_activo'):
             logger.warning(f"Usuario '{username}' autenticado pero inactivo.")
             raise inactive_user_exception
 
-        # Obtener roles del usuario usando el servicio
-        # Usamos try-except aquí por si falla la obtención de roles,
-        # aunque no debería fallar si el usuario existe.
+        # Obtener roles del usuario usando el servicio (devuelve List[Dict])
+        roles_list: List[RolRead] = [] # Inicializar lista para objetos RolRead
         try:
-            roles_list = await UsuarioService.obtener_roles_de_usuario(user['usuario_id'])
-            # Extraer solo los nombres de los roles para facilitar las comprobaciones
-            user['roles'] = [rol['nombre'] for rol in roles_list]
+            # roles_dict_list será del tipo List[Dict]
+            roles_dict_list: List[Dict] = await UsuarioService.obtener_roles_de_usuario(user_dict['usuario_id'])
+            logger.debug(f"Roles (dicts) obtenidos para usuario ID {user_dict['usuario_id']}: {roles_dict_list}")
+
+            # --- Convertir List[Dict] a List[RolRead] ---
+            for rol_dict in roles_dict_list:
+                try:
+                    # Crear instancia de RolRead desde cada diccionario
+                    roles_list.append(RolRead(**rol_dict))
+                except Exception as rol_parse_error:
+                    # Loggear error si un diccionario de rol no es válido
+                    logger.error(f"Error parseando diccionario de rol a RolRead: {rol_dict}. Error: {rol_parse_error}", exc_info=True)
+                    # Decidir si continuar sin este rol o fallar. Por seguridad, fallamos.
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Error interno al procesar datos de roles del usuario."
+                    )
+            # --- FIN CONVERSIÓN ---
+
+            logger.debug(f"Roles convertidos a List[RolRead] para usuario ID {user_dict['usuario_id']}: {[r.nombre for r in roles_list]}")
+
+
         except Exception as role_error:
-            logger.error(f"Error obteniendo roles para usuario ID {user['usuario_id']}: {role_error}")
-            # Decidir si fallar o continuar sin roles. Es más seguro fallar.
+            # Captura errores de UsuarioService.obtener_roles_de_usuario o de la conversión
+            logger.error(f"Error obteniendo/procesando roles para usuario ID {user_dict['usuario_id']}: {role_error}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error interno al obtener roles del usuario."
+                detail="Error interno al obtener o procesar roles del usuario."
             )
 
-        logger.debug(f"Usuario activo '{username}' (ID: {user['usuario_id']}) obtenido con roles: {user['roles']}")
-        return user # Devuelve el diccionario del usuario con la clave 'roles' añadida
+        # --- Construir y devolver la instancia Pydantic ---
+        try:
+            # Crear la instancia usando el diccionario de datos y la LISTA DE OBJETOS RolRead
+            usuario_pydantic = UsuarioReadWithRoles(**user_dict, roles=roles_list)
+            logger.debug(f"Usuario activo '{username}' (ID: {usuario_pydantic.usuario_id}) construido como objeto Pydantic.")
+            return usuario_pydantic # <<< Devolver el objeto Pydantic
+
+        except Exception as pydantic_error:
+            # Error si los datos del diccionario no coinciden con el schema
+            logger.error(f"Error creando instancia Pydantic UsuarioReadWithRoles para '{username}': {pydantic_error}", exc_info=True)
+            logger.error(f"Datos del usuario (dict): {user_dict}")
+            logger.error(f"Roles obtenidos y convertidos (list[RolRead]): {roles_list}") # Loggear la lista convertida
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error interno al procesar datos del usuario."
+            )
 
     except HTTPException as e:
-        # Re-lanzar excepciones HTTP ya manejadas (credentials, inactive)
+        # Re-lanzar excepciones HTTP ya manejadas (credentials, inactive, etc.)
         raise e
     except Exception as e:
+        # Capturar cualquier otro error inesperado
         logger.error(f"Error inesperado obteniendo usuario activo '{username}': {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -119,29 +146,34 @@ async def get_current_active_user(
         )
 
 
-# --- Dependencia de Autorización por Rol ---
+# --- RoleChecker (sin cambios respecto a la versión anterior, ya espera UsuarioReadWithRoles) ---
 
 class RoleChecker:
     """
     Clase para crear dependencias que verifican roles específicos.
-    Permite pasar el rol requerido al crear la dependencia.
-    Ejemplo de uso en un endpoint: Depends(RoleChecker(["admin", "manager"]))
     """
     def __init__(self, allowed_roles: List[str]):
         self.allowed_roles = allowed_roles
 
-    async def __call__(self, current_user: Dict[str, Any] = Depends(get_current_active_user)):
+    async def __call__(self,
+        # <<< Espera UsuarioReadWithRoles
+        current_user: UsuarioReadWithRoles = Depends(get_current_active_user)
+    ):
         """
         Verifica si alguno de los roles del usuario actual está en la lista de roles permitidos.
+        Ahora espera un objeto UsuarioReadWithRoles.
         """
-        user_roles = current_user.get("roles", [])
-        logger.debug(f"Verificando roles. Usuario: {current_user.get('nombre_usuario')}, Roles: {user_roles}, Roles requeridos: {self.allowed_roles}")
+        # <<< Acceder a la lista de objetos RolRead
+        user_roles_objects = current_user.roles
+        # <<< Extraer los nombres de los roles de los objetos
+        user_role_names = [role.nombre for role in user_roles_objects]
 
-        # Comprobar si hay alguna intersección entre los roles del usuario y los permitidos
-        if not any(role in self.allowed_roles for role in user_roles):
-            logger.warning(f"Acceso denegado para usuario '{current_user.get('nombre_usuario')}'. Roles: {user_roles}. Roles requeridos: {self.allowed_roles}")
-            raise forbidden_exception # Lanzar 403 Forbidden
+        logger.debug(f"Verificando roles. Usuario: {current_user.nombre_usuario}, Roles: {user_role_names}, Roles requeridos: {self.allowed_roles}")
 
-        logger.debug(f"Acceso permitido para usuario '{current_user.get('nombre_usuario')}' basado en roles.")
-        # No necesitamos devolver nada, si no hay excepción, el acceso está permitido.
-        # Podríamos devolver el usuario si fuera útil en el endpoint: return current_user
+        # Comprobar si hay alguna intersección entre los nombres de roles del usuario y los permitidos
+        if not any(role_name in self.allowed_roles for role_name in user_role_names):
+            logger.warning(f"Acceso denegado para usuario '{current_user.nombre_usuario}'. Roles: {user_role_names}. Roles requeridos: {self.allowed_roles}")
+            raise forbidden_exception
+
+        logger.debug(f"Acceso permitido para usuario '{current_user.nombre_usuario}' basado en roles.")
+        # No es necesario devolver nada explícitamente si solo se usa para autorización.

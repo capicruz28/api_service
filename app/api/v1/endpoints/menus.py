@@ -6,6 +6,7 @@ from app.db.queries import execute_procedure
 from app.utils.menu_helper import build_menu_tree
 from app.core.logging_config import get_logger
 from app.api.deps import get_current_active_user, RoleChecker
+from app.schemas.usuario import UsuarioReadWithRoles
 from typing import List, Dict, Any
 from app.services.menu_service import MenuService
 from app.schemas.menu import (
@@ -25,28 +26,30 @@ logger = get_logger(__name__)
 ADMIN_ROLE_CHECK = Depends(RoleChecker(["Administrador"]))
 
 # --- Endpoint Existente: /getmenu ---
-@router.get("/getmenu", response_model=MenuResponse)
+@router.get(
+    "/getmenu",
+    response_model=MenuResponse,
+    summary="Obtener Menú del Usuario Autenticado",
+    description="Obtiene la estructura de menú permitida para el usuario actualmente autenticado, basada en sus roles y permisos."
+)
 async def get_menu(
-    # current_user: Usuario = Depends(get_current_active_user)
+    # --- Cambiar la anotación de tipo ---
+    current_user: UsuarioReadWithRoles = Depends(get_current_active_user) # <<< USAR ESTE TIPO
+    # --- Fin Cambio Anotación ---
 ):
-    procedure_name = "sp_GetFullMenu"
-    logger.info(f"Solicitud recibida en GET /menus/getmenu (llamando a {procedure_name})")
+    logger.info(f"Solicitud GET /menus/getmenu recibida para usuario ID: {current_user.usuario_id}")
+    # El resto de la lógica no cambia, ya que current_user sigue teniendo usuario_id
     try:
-        resultado = execute_procedure(procedure_name)
-        if not resultado:
-            logger.warning(f"No se encontraron menús en {procedure_name}.")
-            return MenuResponse(menu=[])
-        menu_items_raw = [dict(row) for row in resultado]
-        menu_tree = build_menu_tree(menu_items_raw)
-        return MenuResponse(menu=menu_tree)
-    except ServiceError as se: # Captura ServiceError directamente
-        logger.error(f"Error de servicio en GET /getmenu: {se.detail}")
+        menu_response = await MenuService.get_menu_for_user(current_user.usuario_id)
+        return menu_response
+    except ServiceError as se:
+        logger.error(f"Error de servicio en GET /getmenu para usuario {current_user.usuario_id}: {se.detail}")
         raise HTTPException(status_code=se.status_code, detail=se.detail)
     except Exception as e:
-        logger.exception(f"Error inesperado durante la obtención/construcción del menú de usuario: {str(e)}")
+        logger.exception(f"Error inesperado durante la obtención del menú para usuario {current_user.usuario_id}: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Error interno del servidor al procesar el menú de usuario."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al procesar el menú del usuario."
         )
 
 # --- Endpoint Existente: /all-structured ---

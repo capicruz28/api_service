@@ -3,7 +3,7 @@
 from typing import List, Dict, Optional, Any
 # Asegúrate de importar todas las funciones y constantes de queries necesarias
 from app.db.queries import (
-    execute_procedure, execute_query, execute_insert, execute_update,
+    execute_procedure, execute_procedure_params, execute_query, execute_insert, execute_update,
     GET_ALL_MENUS_ADMIN, INSERT_MENU, SELECT_MENU_BY_ID, UPDATE_MENU_TEMPLATE,
     DEACTIVATE_MENU, REACTIVATE_MENU, CHECK_MENU_EXISTS, CHECK_AREA_EXISTS,
     GET_MENUS_BY_AREA_FOR_TREE_QUERY,GET_MAX_ORDEN_FOR_SIBLINGS, GET_MAX_ORDEN_FOR_ROOT
@@ -30,6 +30,44 @@ except ImportError:
 
 
 class MenuService:
+
+    @staticmethod
+    async def get_menu_for_user(usuario_id: int) -> MenuResponse:
+        """
+        Obtiene la estructura de menú filtrada según los roles y permisos
+        del usuario especificado.
+        """
+        procedure_name = "sp_GetMenuForUser"
+        # --- CORRECCIÓN AQUÍ ---
+        # Cambiar la clave para que coincida EXACTAMENTE con el parámetro del SP
+        params_dict = {'UsuarioID': usuario_id} # <<< Clave corregida
+        # --- FIN CORRECCIÓN ---
+
+        logger.info(f"Obteniendo menú filtrado para usuario_id: {usuario_id} usando {procedure_name}")
+        try:
+            # Llamar a execute_procedure_params con el diccionario corregido
+            resultado_sp = execute_procedure_params(procedure_name, params_dict)
+
+            if not resultado_sp:
+                logger.info(f"No se encontraron menús permitidos para el usuario ID: {usuario_id}.")
+                # Devolver una respuesta vacía si el SP no devuelve nada
+                return MenuResponse(menu=[])
+
+            # execute_procedure_params ya devuelve una lista de diccionarios
+            # menu_items_raw = [dict(row) for row in resultado_sp] # No es necesario si ya devuelve dicts
+
+            # Usar el helper para construir el árbol con los datos filtrados
+            menu_tree: List[MenuItem] = build_menu_tree(resultado_sp) # Pasar directamente resultado_sp
+            logger.info(f"Árbol de menú construido para usuario {usuario_id} con {len(menu_tree)} items raíz.")
+
+            return MenuResponse(menu=menu_tree)
+
+        except DatabaseError as db_err: # Captura específica si existe
+             logger.error(f"Error de DB al obtener menú para usuario {usuario_id}: {db_err}", exc_info=True)
+             raise ServiceError(status_code=500, detail=f"Error DB al obtener menú del usuario: {getattr(db_err, 'detail', str(db_err))}")
+        except Exception as e:
+            logger.error(f"Error inesperado al obtener/construir árbol de menú para usuario {usuario_id}: {e}", exc_info=True)
+            raise ServiceError(status_code=500, detail="Error interno al procesar el menú del usuario.")
 
     # --- Métodos existentes (get_full_menu, obtener_menu_por_id) ---
     # (Los dejamos como estaban en tu código original, ya que no usaban las nuevas excepciones)
@@ -81,8 +119,9 @@ class MenuService:
             if not resultado_sp:
                 logger.warning(f"{GET_ALL_MENUS_ADMIN} no devolvió resultados.")
                 return MenuResponse(menu=[])
-            menu_items_raw = [dict(row) for row in resultado_sp]
-            menu_tree: List[MenuItem] = build_menu_tree(menu_items_raw)
+            # execute_procedure ya devuelve lista de dicts
+            # menu_items_raw = [dict(row) for row in resultado_sp]
+            menu_tree: List[MenuItem] = build_menu_tree(resultado_sp)
             logger.info(f"Estructura de menú admin construida con {len(menu_tree)} items raíz.")
             return MenuResponse(menu=menu_tree)
         except DatabaseError as db_error: # Mantenemos captura específica si existe
@@ -287,12 +326,10 @@ class MenuService:
                 # Devuelve una respuesta vacía en lugar de error si no hay menús
                 return MenuResponse(menu=[])
 
-            # Convierte las filas (si son tuplas/objetos DB) a diccionarios
-            # Si execute_query ya devuelve lista de dicts, este paso no es necesario
+            # execute_query ya devuelve lista de dicts
             # menu_items_dict_list = [dict(row) for row in menu_items_raw_list]
 
             # Usa el helper para construir el árbol
-            # Asegúrate que build_menu_tree acepte una lista de diccionarios
             menu_tree = build_menu_tree(menu_items_raw_list) # O usa menu_items_dict_list si convertiste
 
             return MenuResponse(menu=menu_tree)

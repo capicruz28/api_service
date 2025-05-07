@@ -39,6 +39,10 @@ def build_menu_tree(menu_items_from_db: List[Dict]) -> List[MenuItem]:
                 orden=item_data.get('orden'),
                 level=item_data.get('Level', 0), # Usar 'Level' como lo devuelve el SP
                 es_activo=item_data.get('es_activo', False), # Obtener es_activo
+                # --- CORRECCIÓN AQUÍ ---
+                area_id=item_data.get('area_id'), # <<< Añadir area_id
+                area_nombre=item_data.get('area_nombre'), # <<< Añadir area_nombre
+                # --- FIN CORRECCIÓN ---
                 children=[]
             )
             menu_dict[menu_id] = menu_item_obj
