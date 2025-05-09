@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import usuarios, auth, menus, roles, permisos, areas
+from app.api.v1.endpoints import usuarios, auth, menus, roles, permisos, areas, costura
 
 api_router = APIRouter()
 
@@ -38,3 +38,9 @@ api_router.include_router(
     prefix="/areas", 
     tags=["Areas"]
     )
+
+api_router.include_router(
+    costura.router,
+    prefix="/costura",
+    tags=["Costura"]
+)
