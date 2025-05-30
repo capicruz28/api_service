@@ -1,13 +1,14 @@
+# app/db/queries.py
 from typing import List, Dict, Any, Callable
-from app.db.connection import get_db_connection
+from app.db.connection import get_db_connection, DatabaseConnection
 from app.core.exceptions import DatabaseError
 import pyodbc
 import logging
 
 logger = logging.getLogger(__name__)
 
-def execute_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
-    with get_db_connection() as conn:
+def execute_query(query: str, params: tuple = (), connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> List[Dict[str, Any]]:
+    with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
@@ -21,9 +22,10 @@ def execute_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
 
 def execute_auth_query(query: str, params: tuple = ()) -> Dict[str, Any]:
     """
-    Ejecuta una consulta específica para autenticación y retorna un único registro
+    Ejecuta una consulta específica para autenticación y retorna un único registro.
+    Siempre usa la conexión DEFAULT ya que la autenticación está en la BD principal.
     """
-    with get_db_connection() as conn:
+    with get_db_connection(DatabaseConnection.DEFAULT) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
@@ -45,19 +47,18 @@ def execute_auth_query(query: str, params: tuple = ()) -> Dict[str, Any]:
             if cursor:
                 cursor.close()
 
-def execute_insert(query: str, params: tuple = ()) -> Dict[str, Any]:
-    with get_db_connection() as conn:
+def execute_insert(query: str, params: tuple = (), connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> Dict[str, Any]:
+    with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
-            
-            # Obtener el ID y datos del registro insertado
+
             if cursor.description:
                 columns = [column[0] for column in cursor.description]
                 result = dict(zip(columns, cursor.fetchone()))
             else:
                 result = {}
-            
+
             conn.commit()
             logger.info("Inserción exitosa")
             return result
@@ -68,23 +69,12 @@ def execute_insert(query: str, params: tuple = ()) -> Dict[str, Any]:
         finally:
             cursor.close()
 
-def execute_update(query: str, params: tuple = ()) -> Dict[str, Any]:
-    """
-    Ejecuta una consulta UPDATE y retorna los datos actualizados
-
-    Args:
-        query: Consulta SQL UPDATE con OUTPUT
-        params: Parámetros para la consulta
-
-    Returns:
-        Dict con los datos del registro actualizado
-    """
-    with get_db_connection() as conn:
+def execute_update(query: str, params: tuple = (), connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> Dict[str, Any]:
+    with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
 
-            # Obtener los datos actualizados si hay OUTPUT en la consulta
             if cursor.description:
                 columns = [column[0] for column in cursor.description]
                 result = dict(zip(columns, cursor.fetchone()))
@@ -103,10 +93,10 @@ def execute_update(query: str, params: tuple = ()) -> Dict[str, Any]:
                 detail=f"Error en la actualización: {str(e)}"
             )
         finally:
-            cursor.close()            
+            cursor.close()
 
-def execute_procedure(procedure_name: str) -> List[Dict[str, Any]]:
-    with get_db_connection() as conn:
+def execute_procedure(procedure_name: str, connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> List[Dict[str, Any]]:
+    with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(f"EXEC {procedure_name}")
@@ -125,8 +115,12 @@ def execute_procedure(procedure_name: str) -> List[Dict[str, Any]]:
         finally:
             cursor.close()
 
-def execute_procedure_params(procedure_name: str, params: dict) -> List[Dict[str, Any]]:
-    with get_db_connection() as conn:
+def execute_procedure_params(
+    procedure_name: str,
+    params: dict,
+    connection_type: DatabaseConnection = DatabaseConnection.DEFAULT
+) -> List[Dict[str, Any]]:
+    with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             param_str = ", ".join([f"@{key} = ?" for key in params.keys()])
@@ -148,31 +142,28 @@ def execute_procedure_params(procedure_name: str, params: dict) -> List[Dict[str
         finally:
             cursor.close()
 
-def execute_transaction(operations_func: Callable[[pyodbc.Cursor], None]) -> None:
+def execute_transaction(
+    operations_func: Callable[[pyodbc.Cursor], None],
+    connection_type: DatabaseConnection = DatabaseConnection.DEFAULT
+) -> None:
     """
     Ejecuta operaciones de BD en una transacción.
     Maneja errores de conexión y operación de pyodbc.
     """
-    conn = None # Para referencia en logging si es necesario
-    cursor = None # Para referencia en logging si es necesario
+    conn = None
+    cursor = None
     try:
-        # 'get_db_connection' puede lanzar pyodbc.Error si falla la conexión
-        with get_db_connection() as conn:
+        with get_db_connection(connection_type) as conn:
             cursor = conn.cursor()
-            # 'operations_func' puede lanzar pyodbc.Error (ej. IntegrityError)
             operations_func(cursor)
-            # Si todo va bien, commit
             conn.commit()
             logger.debug("Transacción completada exitosamente.")
 
-    except pyodbc.Error as db_err: # Captura CUALQUIER error de pyodbc
-        # El rollback es implícito porque no se hizo commit y la conexión se cerrará.
+    except pyodbc.Error as db_err:
         logger.error(f"Error de base de datos (pyodbc) en transacción: {db_err}", exc_info=True)
-        # Relanzar como DatabaseError genérico para el servicio/endpoint
         raise DatabaseError(status_code=500, detail=f"Error DB en transacción: {str(db_err)}")
 
     except Exception as e:
-        # Captura cualquier otro error inesperado en operations_func
         logger.error(f"Error inesperado (no pyodbc) en transacción: {e}", exc_info=True)
         raise DatabaseError(status_code=500, detail=f"Error inesperado en transacción: {str(e)}")
 

@@ -1,3 +1,4 @@
+# app/core/config.py
 from pydantic_settings import BaseSettings
 from typing import List
 import os
@@ -13,12 +14,19 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DESCRIPTION: str = "API FastAPI para PeruFashions"
 
-    # Database
+    # Database Principal
     DB_SERVER: str = os.getenv("DB_SERVER", "")
     DB_USER: str = os.getenv("DB_USER", "")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     DB_DATABASE: str = os.getenv("DB_DATABASE", "")
-    DB_PORT: int = int(os.getenv("DB_PORT", ""))
+    DB_PORT: int = int(os.getenv("DB_PORT", "1433"))  # Puerto por defecto SQL Server
+
+    # Database Administración
+    DB_ADMIN_SERVER: str = os.getenv("DB_ADMIN_SERVER", "")
+    DB_ADMIN_USER: str = os.getenv("DB_ADMIN_USER", "")
+    DB_ADMIN_PASSWORD: str = os.getenv("DB_ADMIN_PASSWORD", "")
+    DB_ADMIN_DATABASE: str = os.getenv("DB_ADMIN_DATABASE", "")
+    DB_ADMIN_PORT: int = int(os.getenv("DB_ADMIN_PORT", "1433"))  # Puerto por defecto SQL Server
 
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
@@ -36,10 +44,21 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    def get_database_url(self) -> str:
+    def get_database_url(self, is_admin: bool = False) -> str:
         """
         Construye y retorna la URL de conexión a la base de datos
+        Args:
+            is_admin: Si es True, devuelve la conexión de administración
         """
+        if is_admin:
+            return (
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                f"SERVER={self.DB_ADMIN_SERVER},{self.DB_ADMIN_PORT};"
+                f"DATABASE={self.DB_ADMIN_DATABASE};"
+                f"UID={self.DB_ADMIN_USER};"
+                f"PWD={self.DB_ADMIN_PASSWORD};"
+                "TrustServerCertificate=yes;"
+            )
         return (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={self.DB_SERVER},{self.DB_PORT};"

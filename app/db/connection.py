@@ -1,21 +1,34 @@
+# app/db/connection.py
 import pyodbc
 from app.core.config import settings
 from contextlib import contextmanager
 import logging
 from app.core.exceptions import DatabaseError
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-@contextmanager
-def get_db_connection():
+class DatabaseConnection(Enum):
+    DEFAULT = "default"
+    ADMIN = "admin"
+
+def get_connection_string(connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> str:
     """
-    Context manager MUY SIMPLE para obtener y cerrar una conexión a BD.
-    Permite que TODOS los errores (conexión u operación) se propaguen.
+    Obtiene la cadena de conexión según el tipo de conexión requerida.
     """
-    conn = None
-    try:
-        # Intentar conectar. Si falla, pyodbc.Error se propagará.
-        conn_str = (
+    if connection_type == DatabaseConnection.ADMIN:
+        # Conexión para administración
+        return (
+            f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+            f"SERVER={settings.DB_ADMIN_SERVER},{settings.DB_ADMIN_PORT};"
+            f"DATABASE={settings.DB_ADMIN_DATABASE};"
+            f"UID={settings.DB_ADMIN_USER};"
+            f"PWD={settings.DB_ADMIN_PASSWORD};"
+            "TrustServerCertificate=yes;"
+        )
+    else:
+        # Conexión default (la que ya tenías)
+        return (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={settings.DB_SERVER},{settings.DB_PORT};"
             f"DATABASE={settings.DB_DATABASE};"
@@ -23,35 +36,25 @@ def get_db_connection():
             f"PWD={settings.DB_PASSWORD};"
             "TrustServerCertificate=yes;"
         )
-        conn = pyodbc.connect(conn_str)
-        logger.debug("Conexión a BD establecida.")
-        # Entregar la conexión
-        yield conn
-        # Si el 'with' termina sin error, no hacemos nada aquí
 
-    # NO hay bloque 'except' aquí. Los errores se propagan.
+@contextmanager
+def get_db_connection(connection_type: DatabaseConnection = DatabaseConnection.DEFAULT):
+    """
+    Context manager para obtener y cerrar una conexión a BD.
+    Permite especificar el tipo de conexión requerida.
+    """
+    conn = None
+    try:
+        conn_str = get_connection_string(connection_type)
+        conn = pyodbc.connect(conn_str)
+        logger.debug(f"Conexión a BD ({connection_type.value}) establecida.")
+        yield conn
+
+    except pyodbc.Error as e:
+        logger.error(f"Error de conexión a la base de datos ({connection_type.value}): {str(e)}")
+        raise DatabaseError(status_code=500, detail=f"Error de conexión: {str(e)}")
+
     finally:
-        # Asegurar el cierre si la conexión se estableció
         if conn:
             conn.close()
-            logger.debug("Conexión a BD cerrada.")
-
-#@contextmanager
-#def get_db_connection():
-#    conn = None
-#    try:
-#        conn = pyodbc.connect(
-#           f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-#            f"SERVER={settings.DB_SERVER},{settings.DB_PORT};"
-#            f"DATABASE={settings.DB_DATABASE};"
-#            f"UID={settings.DB_USER};"
-#            f"PWD={settings.DB_PASSWORD};"
-#            "TrustServerCertificate=yes;"
-#        )
-#        yield conn
-#    except pyodbc.Error as e:
-#        logger.error(f"Error de conexión a la base de datos: {str(e)}")
-#        raise DatabaseError(status_code=500, detail=f"Error de conexión: {str(e)}")
-#    finally:
-#        if conn:
-#            conn.close()
+            logger.debug(f"Conexión a BD ({connection_type.value}) cerrada.")
