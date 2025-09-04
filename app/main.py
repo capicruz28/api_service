@@ -101,6 +101,16 @@ async def test_db():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+        
+@app.get("/drivers")
+async def check_drivers():
+    """Endpoint para verificar drivers ODBC disponibles"""
+    from app.db.connection import test_drivers
+    drivers = test_drivers()
+    return {
+        "drivers_available": list(drivers),
+        "odbc_17_found": 'ODBC Driver 17 for SQL Server' in drivers
+    }
 
 if __name__ == "__main__":
     import uvicorn

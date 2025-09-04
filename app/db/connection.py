@@ -24,21 +24,72 @@ def test_drivers():
 def get_connection_string(connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> str:
     """
     Obtiene la cadena de conexión según el tipo de conexión requerida.
-    Usa el método del settings para construir la conexión.
+    Intenta múltiples drivers en orden de preferencia.
     """
     try:
-        # Usar el método del config.py
-        is_admin = connection_type == DatabaseConnection.ADMIN
-        conn_str = settings.get_database_url(is_admin=is_admin)
+        # Obtener drivers disponibles
+        available_drivers = test_drivers()
         
-        # Agregar parámetros adicionales recomendados para Azure SQL
-        if "Encrypt" not in conn_str:
-            conn_str += "Encrypt=yes;"
-        if "Connection Timeout" not in conn_str:
-            conn_str += "Connection Timeout=30;"
+        # Lista de drivers en orden de preferencia
+        preferred_drivers = [
+            'ODBC Driver 18 for SQL Server',
+            'ODBC Driver 17 for SQL Server',
+            'ODBC Driver 13 for SQL Server',
+            'FreeTDS'
+        ]
+        
+        # Encontrar el primer driver disponible
+        selected_driver = None
+        for driver in preferred_drivers:
+            if driver in available_drivers:
+                selected_driver = driver
+                break
+        
+        if not selected_driver:
+            logger.error(f"No se encontró ningún driver SQL Server compatible. Disponibles: {available_drivers}")
+            # Intentar con el driver por defecto anyway
+            selected_driver = 'ODBC Driver 17 for SQL Server'
+        
+        logger.info(f"Usando driver: {selected_driver}")
+        
+        # Obtener parámetros de conexión según el tipo
+        if connection_type == DatabaseConnection.ADMIN:
+            server = settings.DB_ADMIN_SERVER
+            port = settings.DB_ADMIN_PORT
+            database = settings.DB_ADMIN_DATABASE
+            user = settings.DB_ADMIN_USER
+            password = settings.DB_ADMIN_PASSWORD
+        else:
+            server = settings.DB_SERVER
+            port = settings.DB_PORT
+            database = settings.DB_DATABASE
+            user = settings.DB_USER
+            password = settings.DB_PASSWORD
+        
+        # Construir connection string según el driver
+        if selected_driver == 'FreeTDS':
+            conn_str = (
+                f"DRIVER={{{selected_driver}}};"
+                f"SERVER={server};"
+                f"PORT={port};"
+                f"DATABASE={database};"
+                f"UID={user};"
+                f"PWD={password};"
+                f"TDS_Version=8.0;"
+            )
+        else:
+            conn_str = (
+                f"DRIVER={{{selected_driver}}};"
+                f"SERVER={server},{port};"
+                f"DATABASE={database};"
+                f"UID={user};"
+                f"PWD={password};"
+                f"Encrypt=yes;"
+                f"TrustServerCertificate=yes;"
+                f"Connection Timeout=30;"
+            )
         
         # Log de debugging (sin mostrar contraseña)
-        password = settings.DB_ADMIN_PASSWORD if is_admin else settings.DB_PASSWORD
         safe_conn_str = conn_str.replace(f"PWD={password}", "PWD=***")
         logger.info(f"Connection string ({connection_type.value}): {safe_conn_str}")
         
@@ -56,18 +107,7 @@ def get_db_connection(connection_type: DatabaseConnection = DatabaseConnection.D
     """
     conn = None
     try:
-        # Verificar drivers disponibles
-        drivers = test_drivers()
-        
-        if 'ODBC Driver 17 for SQL Server' not in drivers:
-            logger.error("ODBC Driver 17 for SQL Server no encontrado!")
-            logger.error(f"Drivers disponibles: {drivers}")
-            raise DatabaseError(
-                status_code=500, 
-                detail="Driver ODBC para SQL Server no instalado en el sistema"
-            )
-        
-        # Verificar configuración
+        # Verificar configuración básica
         if connection_type == DatabaseConnection.ADMIN:
             if not all([settings.DB_ADMIN_SERVER, settings.DB_ADMIN_USER, settings.DB_ADMIN_PASSWORD]):
                 raise DatabaseError(
@@ -128,6 +168,9 @@ def get_db_connection(connection_type: DatabaseConnection = DatabaseConnection.D
 async def test_database_connection():
     """Función para probar la conexión a la base de datos"""
     try:
+        # Primero mostrar información de debug
+        drivers = test_drivers()
+        
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT GETDATE() as CurrentTime, @@VERSION as SQLVersion")
@@ -135,12 +178,21 @@ async def test_database_connection():
             cursor.close()
             return {
                 "status": "success",
-                "current_time": result[0],
-                "sql_version": result[1][:50] + "..." if len(result[1]) > 50 else result[1]
+                "drivers_available": list(drivers),
+                "current_time": str(result[0]),
+                "sql_version": result[1][:100] + "..." if len(result[1]) > 100 else result[1]
             }
     except Exception as e:
         logger.error(f"Test de conexión falló: {e}")
+        drivers = test_drivers()
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "drivers_available": list(drivers),
+            "debug_info": {
+                "server": settings.DB_SERVER,
+                "database": settings.DB_DATABASE,
+                "user": settings.DB_USER,
+                "port": settings.DB_PORT
+            }
         }
