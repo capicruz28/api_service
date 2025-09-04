@@ -6,9 +6,32 @@ services:
     dockerfilePath: ./Dockerfile
     autoDeploy: true
     envVars:
-      - key: DATABASE_URL
-        value: mssql+pyodbc://carpin:S1st3m4s@carpinsvr.database.windows.net.database.windows.net/bdprueba?driver=ODBC+Driver+17+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no
+      # Variables para tu connection.py
+      - key: DB_SERVER
+        value: carpinsvr.database.windows.net
+      - key: DB_PORT
+        value: "1433"
+      - key: DB_DATABASE
+        value: bdprueba
+      - key: DB_USER
+        value: carpin
+      - key: DB_PASSWORD
+        value: S1st3m4s
+      
+      # Variables adicionales
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "30"
       - key: SECRET_KEY
-        value: <tu-clave-secreta>
+        value: tu-clave-secreta-aqui
+        
+      # Variables admin (si las usas)
+      - key: DB_ADMIN_SERVER
+        value: carpinsvr.database.windows.net
+      - key: DB_ADMIN_PORT
+        value: "1433"
+      - key: DB_ADMIN_DATABASE
+        value: bdprueba
+      - key: DB_ADMIN_USER
+        value: carpin
+      - key: DB_ADMIN_PASSWORD
+        value: S1st3m4s
