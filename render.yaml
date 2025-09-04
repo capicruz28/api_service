@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: fastapi-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        value: mssql+pyodbc://carpin:S1st3m4s@carpinsvr.database.windows.net.database.windows.net/bdprueba?driver=ODBC+Driver+17+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: SECRET_KEY
+        value: <tu-clave-secreta>
