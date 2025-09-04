@@ -101,7 +101,7 @@ async def test_db():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
-        
+
 @app.get("/drivers")
 async def check_drivers():
     """Endpoint para verificar drivers ODBC disponibles"""
@@ -110,6 +110,19 @@ async def check_drivers():
     return {
         "drivers_available": list(drivers),
         "odbc_17_found": 'ODBC Driver 17 for SQL Server' in drivers
+    }
+
+@app.get("/debug-env")
+async def debug_env():
+    """Endpoint para verificar variables de entorno (sin mostrar passwords)"""
+    from app.core.config import settings
+    return {
+        "db_server": settings.DB_SERVER,
+        "db_user": settings.DB_USER,
+        "db_database": settings.DB_DATABASE,
+        "db_port": settings.DB_PORT,
+        "db_password_set": bool(settings.DB_PASSWORD),
+        "secret_key_set": bool(settings.SECRET_KEY),
     }
 
 if __name__ == "__main__":

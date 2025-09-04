@@ -78,16 +78,31 @@ def get_connection_string(connection_type: DatabaseConnection = DatabaseConnecti
                 f"TDS_Version=8.0;"
             )
         else:
-            conn_str = (
-                f"DRIVER={{{selected_driver}}};"
-                f"SERVER={server},{port};"
-                f"DATABASE={database};"
-                f"UID={user};"
-                f"PWD={password};"
-                f"Encrypt=yes;"
-                f"TrustServerCertificate=yes;"
-                f"Connection Timeout=30;"
-            )
+            # Para Azure SQL Database, usar formato específico
+            if 'database.windows.net' in server:
+                conn_str = (
+                    f"DRIVER={{{selected_driver}}};"
+                    f"SERVER=tcp:{server},{port};"
+                    f"DATABASE={database};"
+                    f"UID={user};"
+                    f"PWD={password};"
+                    f"Encrypt=yes;"
+                    f"TrustServerCertificate=no;"
+                    f"Connection Timeout=30;"
+                    f"LoginTimeout=30;"
+                )
+            else:
+                # Para SQL Server local/on-premise
+                conn_str = (
+                    f"DRIVER={{{selected_driver}}};"
+                    f"SERVER={server},{port};"
+                    f"DATABASE={database};"
+                    f"UID={user};"
+                    f"PWD={password};"
+                    f"Encrypt=yes;"
+                    f"TrustServerCertificate=yes;"
+                    f"Connection Timeout=30;"
+                )
         
         # Log de debugging (sin mostrar contraseña)
         safe_conn_str = conn_str.replace(f"PWD={password}", "PWD=***")
