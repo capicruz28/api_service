@@ -59,7 +59,7 @@ async def root():
     Ruta raíz que muestra información básica de la API
     """
     return {
-        "message": "PeruFashions API",
+        "message": "Service API",
         "version": settings.VERSION,
         "docs": "/docs"
     }

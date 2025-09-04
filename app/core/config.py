@@ -10,9 +10,9 @@ load_dotenv()
 class Settings(BaseSettings):
     # API
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "PeruFashions API"
+    PROJECT_NAME: str = "Service API"
     VERSION: str = "1.0.0"
-    DESCRIPTION: str = "API FastAPI para PeruFashions"
+    DESCRIPTION: str = "API FastAPI para Service"
 
     # Database Principal
     DB_SERVER: str = os.getenv("DB_SERVER", "")
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", ""))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     ALGORITHM: str = os.getenv("ALGORITHM", "")  # Agregamos el algoritmo para JWT
 
     # CORS - Lista predefinida de orígenes permitidos
