@@ -89,15 +89,18 @@ async def health_check():
 # Para compatibilidad con el código existente
 @app.get("/api/test")
 async def test_db():
-    """
-    Test de conexión a la base de datos
-    """
     try:
         with get_db_connection() as conn:
-            return {"message": "Conexión exitosa"}
+            if conn:
+                return {"message": "Conexión exitosa"}
+            else:
+                return {"error": "Conexión fallida: objeto de conexión es None"}
     except Exception as e:
-        logger.error(f"Error en test de conexión: {str(e)}")
-        return {"error": str(e)}
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 if __name__ == "__main__":
     import uvicorn
